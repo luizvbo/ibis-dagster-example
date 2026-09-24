@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ibis-dagster-example"
+version = "0.1.0"
+description = "Example Dagster project using Ibis to run the same pipeline on DuckDB, Polars, or PySpark"
+requires-python = ">=3.10"
+dependencies = [
+    "dagster>=1.9",
+    "dagster-webserver>=1.9",
+    "ibis-framework[duckdb,polars]>=10",
+    # ibis declares sqlglot>=23.4 unbounded; sqlglot>=30 breaks ibis's
+    # generated DDL (e.g. DROP TABLE renders without a table name)
+    "sqlglot>=26,<30",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+pyspark = ["ibis-framework[pyspark]>=10"]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ibis_dagster_example"]
+
+[tool.dagster]
+module_name = "ibis_dagster_example.definitions"
