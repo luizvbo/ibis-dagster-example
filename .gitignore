@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project artifacts
+*.duckdb
+*.duckdb.wal
+.dagster/
+spark-warehouse/
+metastore_db/
+derby.log
+.tmp_dagster_home*/
