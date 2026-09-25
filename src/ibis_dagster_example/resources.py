@@ -8,7 +8,7 @@ Switching engines is pure configuration (`backend` field).
 import dagster as dg
 import ibis
 from ibis.backends import BaseBackend
-from pydantic import PrivateAttr
+from functools import lru_cache
 
 
 class IbisResource(dg.ConfigurableResource):
@@ -33,31 +33,43 @@ class IbisResource(dg.ConfigurableResource):
     spark_master: str = "local[*]"
     spark_warehouse_dir: str = "./spark-warehouse"
 
-    # One connection per run: polars registers tables per-connection, and a
-    # duckdb file can only be locked once, so all assets share this handle.
-    _con: BaseBackend | None = PrivateAttr(default=None)
-
     def connect(self) -> BaseBackend:
-        """Return the run's Ibis connection, opening it on first use."""
-        if self._con is None:
-            self._con = self._connect()
-        return self._con
+        """Return the process-wide Ibis connection for this configuration.
 
-    def _connect(self) -> BaseBackend:
-        if self.backend == "duckdb":
-            return ibis.duckdb.connect(self.duckdb_path)
-        if self.backend == "polars":
-            return ibis.polars.connect()
-        if self.backend == "pyspark":
-            from pyspark.sql import SparkSession
-
-            session = (
-                SparkSession.builder.master(self.spark_master)
-                .config("spark.sql.warehouse.dir", self.spark_warehouse_dir)
-                .getOrCreate()
-            )
-            return ibis.pyspark.connect(session)
-        raise ValueError(
-            f"Unsupported ibis backend {self.backend!r}. "
-            "Expected one of: 'duckdb', 'polars', 'pyspark'."
+        Dagster may hand different resource instances to assets, the io
+        manager, and checks — so the connection is cached by config, not by
+        instance. One connection per process is required anyway: polars
+        registers tables per-connection and a duckdb file locks once.
+        """
+        return _connection(
+            self.backend,
+            self.duckdb_path,
+            self.spark_master,
+            self.spark_warehouse_dir,
         )
+
+
+@lru_cache(maxsize=8)
+def _connection(
+    backend: str,
+    duckdb_path: str,
+    spark_master: str,
+    spark_warehouse_dir: str,
+) -> BaseBackend:
+    if backend == "duckdb":
+        return ibis.duckdb.connect(duckdb_path)
+    if backend == "polars":
+        return ibis.polars.connect()
+    if backend == "pyspark":
+        from pyspark.sql import SparkSession
+
+        session = (
+            SparkSession.builder.master(spark_master)
+            .config("spark.sql.warehouse.dir", spark_warehouse_dir)
+            .getOrCreate()
+        )
+        return ibis.pyspark.connect(session)
+    raise ValueError(
+        f"Unsupported ibis backend {backend!r}. "
+        "Expected one of: 'duckdb', 'polars', 'pyspark'."
+    )

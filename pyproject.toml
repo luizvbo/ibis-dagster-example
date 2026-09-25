@@ -19,7 +19,14 @@ dependencies = [
 
 [project.optional-dependencies]
 pyspark = ["ibis-framework[pyspark]>=10"]
-dev = ["pytest>=8"]
+# dev pulls the pyspark + bigquery extras so the compile tests can check
+# dialect output without needing a JVM or credentials
+dev = ["pytest>=8", "ibis-framework[bigquery,pyspark]>=10"]
+
+# uv auto-includes this group in `uv run`/`uv sync` (mirrors the dev extra
+# for pip users)
+[dependency-groups]
+dev = ["pytest>=8", "ibis-framework[bigquery,pyspark]>=10"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ibis_dagster_example"]

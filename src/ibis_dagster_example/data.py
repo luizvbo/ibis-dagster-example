@@ -1,7 +1,8 @@
-"""Seed data for the example pipeline, expressed as Ibis memtables.
+"""Test fixtures: the same rows as data/*.csv, as Ibis memtables.
 
-Memtables are backend-agnostic: any Ibis backend can ingest them, so the
-same seeding logic works on DuckDB, Polars, PySpark, or anything else.
+The pipeline reads external sources through the IO manager's `sources`
+config (see definitions.py); these memtables only back the unit tests,
+where seed-inject-assert is more convenient than temp CSV files.
 """
 
 from datetime import datetime
