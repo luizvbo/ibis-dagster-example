@@ -12,12 +12,20 @@ from ibis.expr import types as ir
 
 
 def clean_events(raw_events: ir.Table) -> ir.Table:
-    """Normalize raw clickstream events: fix casing, fill nulls, dedupe."""
+    """Normalize raw clickstream events: fix types/casing, fill nulls, dedupe.
+
+    The casts are portable and no-ops when the column is already typed —
+    they matter because CSV readers type `ts`/`amount` differently per
+    backend (polars reads ts as string, spark CSV reads all strings).
+    """
+    normalized = raw_events.mutate(
+        ts=_.ts.cast("timestamp"),
+        amount=_.amount.cast("float64"),
+        event_type=_.event_type.lower().strip(),
+    )
     return (
-        raw_events.mutate(
-            event_type=_.event_type.lower().strip(),
-            amount=_.amount.fill_null(0.0),
-            date=_.ts.truncate("D"),
+        normalized.mutate(
+            amount=_.amount.fill_null(0.0), date=_.ts.truncate("D")
         )
         .filter(_.event_id.notnull(), _.user_id.notnull())
         .distinct()
