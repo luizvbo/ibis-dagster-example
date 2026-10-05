@@ -14,12 +14,13 @@ resource configuration, following the standard Dagster patterns:
   the documented Dagster equivalent of a per-env data catalog.
 
 ```mermaid
-flowchart TD
-    dagster["asset graph (dagster)"] --> io["IbisIOManager"]
-    assets["assets: pure ibis exprs (ir.Table → ir.Table)"] --> io
-    res["IbisResource.connect() → duckdb | polars | pyspark"] --> io
-    io -- "load_input / handle_output" --> con["con.read_* / con.table / con.create_table"]
-    io -. "sources={...} per deployment" .-> con
+flowchart LR
+    code["same pipeline code<br/>dagster assets + ibis expressions<br/>(written once)"]
+    code -->|"DAGSTER_DEPLOYMENT_NAME<br/>swaps engine + storage"| dep
+    subgraph dep["pick a deployment"]
+        direction TB
+        a["local<br/>duckdb + csv files"] ~~~ b["polars<br/>polars + csv files"] ~~~ c["prod<br/>pyspark + parquet"]
+    end
 ```
 
 ## Layout
@@ -78,6 +79,25 @@ just materialize polars
 (One expected failure on the `polars` deployment: `latest_event_per_user`
 uses window functions, which ibis's polars backend can't translate (see
 below). The rest of the graph still materializes.)
+
+## Coming from Airflow?
+
+`dagster dev` serves the UI on `localhost:3000`. The vocabulary maps
+roughly like this:
+
+| Airflow                 | Dagster                                                  |
+| ----------------------- | -------------------------------------------------------- |
+| DAG (tasks + deps)      | the Assets page (the pipeline's lineage graph)           |
+| trigger a DAG           | the **Materialize** button (or `just materialize <dep>`) |
+| DAG run / task logs     | Runs tab → a run → per-step logs                         |
+| `schedule_interval`     | `ScheduleDefinition` (`daily_schedule`, off by default)  |
+| XCom / implicit passing | the I/O manager (explicit, per asset output)             |
+| data-quality operators  | `@asset_check` (a step in the same run)                  |
+
+The Assets page is your DAG view; opening a run shows the same graph
+with per-asset metadata (row counts, compiled SQL, check results).
+For real Airflow migrations there's
+[dagster-airlift](https://github.com/dagster-io/dagster/tree/master/python_modules/libraries/dagster-airlift).
 
 ## How environments work
 
