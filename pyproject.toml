@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "ibis-dagster-example"
 version = "0.1.0"
 description = "Example Dagster project using Ibis to run the same pipeline on DuckDB, Polars, or PySpark"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "dagster>=1.9",
     "dagster-webserver>=1.9",
