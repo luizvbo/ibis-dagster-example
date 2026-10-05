@@ -4,11 +4,11 @@ Assets are pure functions `ir.Table -> ir.Table`; this manager owns all I/O:
 
 - `handle_output` persists the returned expression via `con.create_table`
 - `load_input`   hands downstream assets `con.table(<upstream asset>)`
-- `sources`      maps upstream (external) asset names to physical reads —
+- `sources`      maps upstream (external) asset names to physical reads:
                  `{"events_csv": {"format": "csv", "path": "..."}}`
 
 Different deployments bind differently-configured instances of this manager
-(see definitions.py) — the Dagster equivalent of a per-environment catalog.
+(see definitions.py): the Dagster equivalent of a per-environment catalog.
 """
 
 import os
@@ -52,12 +52,12 @@ class IbisIOManager(dg.ConfigurableIOManager):
         metadata = {
             "ibis_backend": con.name,
             "table": name,
-            "row_count": int(created.count().execute()),  # ty: ignore[invalid-argument-type] — scalar .execute() is typed DataFrame|Series|Any
+            "row_count": int(created.count().execute()),  # ty: ignore[invalid-argument-type] (scalar .execute() is typed DataFrame|Series|Any
             "preview": dg.MetadataValue.md(
                 created.head(10).execute().to_markdown(index=False)
             ),
         }
-        # SQL backends can show the compiled SQL — a nice way to demo that
+        # SQL backends can show the compiled SQL, a nice way to demo that
         # Ibis compiles the same expression to different dialects/engines.
         with suppress(Exception):
             metadata["compiled"] = dg.MetadataValue.md(f"```\n{con.compile(obj)}\n```")

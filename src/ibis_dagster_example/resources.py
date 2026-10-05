@@ -25,7 +25,7 @@ class IbisResource(dg.ConfigurableResource):
         Spark master URL, e.g. "local[*]" or "spark://host:7077" (or a
         Spark Connect URL via spark.remote).
     spark_warehouse_dir
-        `spark.sql.warehouse.dir` — where Spark persists managed tables.
+        `spark.sql.warehouse.dir`, where Spark persists managed tables.
     """
 
     backend: str = "duckdb"
@@ -38,7 +38,7 @@ class IbisResource(dg.ConfigurableResource):
         """Return the process-wide Ibis connection for this configuration.
 
         Dagster may hand different resource instances to assets, the io
-        manager, and checks — so the connection is cached by config, not by
+        manager, and checks, so the connection is cached by config, not by
         instance. One connection per process is required anyway: polars
         registers tables per-connection and a duckdb file locks once.
         """

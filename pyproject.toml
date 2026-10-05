@@ -43,7 +43,7 @@ target-version = "py312"
 [tool.ruff.lint.per-file-ignores]
 # memtable fixtures: naive datetimes mirror the CSV sources' schema
 "src/ibis_dagster_example/data.py" = ["DTZ001"]
-# helpers skip a backend on ANY start failure — blind except is intentional
+# helpers skip a backend on ANY start failure; blind except is intentional
 "tests/**" = ["BLE001"]
 
 # resolve imports against the project's own venv (pyspark lives in the

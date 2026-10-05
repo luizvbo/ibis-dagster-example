@@ -1,4 +1,4 @@
-"""Data quality checks — the dbt `test` analog, as Dagster asset checks.
+"""Data quality checks: the dbt `test` analog, as Dagster asset checks.
 
 Each check is a portable Ibis expression executed on the run's backend, so
 the quality gates are engine-agnostic too. `blocking=True` gates downstream
@@ -21,7 +21,7 @@ from .resources import IbisResource
 def _violations(ibis: IbisResource, table: str, predicate) -> int:
     """Count rows in `table` matching `predicate` on the run's backend."""
     con = ibis.connect()
-    return int(con.table(table).filter(predicate).count().execute())  # ty: ignore[invalid-argument-type] — scalar .execute() is typed DataFrame|Series|Any
+    return int(con.table(table).filter(predicate).count().execute())  # ty: ignore[invalid-argument-type] (scalar .execute() is typed DataFrame|Series|Any
 
 
 @dg.asset_check(asset=raw_events, description="raw_events has rows")

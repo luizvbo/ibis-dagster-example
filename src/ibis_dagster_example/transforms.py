@@ -1,7 +1,7 @@
 """Backend-agnostic pipeline logic, written as pure Ibis expressions.
 
 Each function takes Ibis table expressions and returns a new table
-expression. Nothing here knows which engine will run it — DuckDB compiles
+expression. Nothing here knows which engine will run it. DuckDB compiles
 it to DuckDB SQL, PySpark to Spark SQL, Polars to a Polars plan.
 Only portable, widely-supported operations are used.
 """
@@ -14,7 +14,7 @@ from ibis.expr import types as ir
 def clean_events(raw_events: ir.Table) -> ir.Table:
     """Normalize raw clickstream events: fix types/casing, fill nulls, dedupe.
 
-    The casts are portable and no-ops when the column is already typed —
+    The casts are portable and no-ops when the column is already typed;
     they matter because CSV readers type `ts`/`amount` differently per
     backend (polars reads ts as string, spark CSV reads all strings).
     """
@@ -37,7 +37,7 @@ def daily_active_users(cleaned_events: ir.Table) -> ir.Table:
         .agg(
             n_events=_.count(),
             n_active_users=_.user_id.nunique(),
-            n_purchases=ibis.ifelse(_.event_type == "purchase", 1, 0).sum(),  # ty: ignore[unresolved-attribute] — ifelse() is typed as generic Value
+            n_purchases=ibis.ifelse(_.event_type == "purchase", 1, 0).sum(),  # ty: ignore[unresolved-attribute] (ifelse() is typed as generic Value
         )
         .order_by("date")
     )
@@ -63,7 +63,7 @@ def latest_event_per_user(events: ir.Table) -> ir.Table:
 
     NOT portable: the ibis polars backend has no WindowFunction translation
     (polars's native .over() isn't wired up). Compiles/runs on duckdb,
-    pyspark, bigquery — raises OperationNotDefinedError on polars at
+    pyspark, bigquery; raises OperationNotDefinedError on polars at
     compile time. See latest_event_per_user_portable for the fallback.
     """
     return (
@@ -78,7 +78,7 @@ def latest_event_per_user(events: ir.Table) -> ir.Table:
 
 
 def latest_event_per_user_portable(events: ir.Table) -> ir.Table:
-    """Same result, no window functions — runs on every backend
+    """Same result, no window functions; runs on every backend
     (group_by + join instead of row_number)."""
     latest = events.group_by("user_id").agg(latest_ts=_.ts.max())
     return (

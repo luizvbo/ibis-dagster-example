@@ -1,6 +1,6 @@
 """Dagster assets as pure Ibis transforms.
 
-Assets take and return `ir.Table` expressions — no engine, no storage
+Assets take and return `ir.Table` expressions: no engine, no storage
 details. The `IbisIOManager` persists outputs and resolves inputs;
 which backend runs the expressions and where sources point is entirely
 deployment configuration.
@@ -51,10 +51,10 @@ def category_revenue(cleaned_events: ir.Table, raw_products: ir.Table) -> ir.Tab
 
 @dg.asset(group_name="gold", kinds={"ibis"})
 def latest_event_per_user(cleaned_events: ir.Table) -> ir.Table:
-    """Most recent event per user — window functions, SQL backends only.
+    """Most recent event per user, via window functions (SQL backends only).
 
     Intentionally non-portable: this materializes on duckdb/pyspark and
-    fails loudly at compile time on polars (OperationNotDefinedError —
+    fails loudly at compile time on polars (OperationNotDefinedError:
     windows aren't implemented in ibis's polars backend). For a portable
     equivalent see transforms.latest_event_per_user_portable.
     """

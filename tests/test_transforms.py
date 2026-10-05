@@ -1,5 +1,5 @@
 """Run the pipeline transforms and I/O manager against every available Ibis
-backend and assert identical results — the portability contract.
+backend and assert identical results: the portability contract.
 """
 
 import dagster as dg
@@ -97,7 +97,7 @@ def test_category_revenue(con, cleaned):
 
 
 def test_latest_event_per_user_windowed(con, cleaned):
-    """Window functions run on SQL backends and fail loudly on polars —
+    """Window functions run on SQL backends and fail loudly on polars:
     OperationNotDefinedError at translate time, before touching data."""
     expr = transforms.latest_event_per_user(cleaned)
     if con.name == "polars":
@@ -153,7 +153,7 @@ def test_full_pipeline_on_polars():
 
 def test_windowed_asset_fails_loudly_on_polars():
     """Materializing the windowed asset on polars fails with a named,
-    translate-time error — the boundary is loud, not silent."""
+    translate-time error; the boundary is loud, not silent."""
     with pytest.raises(
         ibis.common.exceptions.OperationNotDefinedError, match="WindowFunction"
     ):

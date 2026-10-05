@@ -1,7 +1,7 @@
 """Dagster definitions.
 
 Environment selection follows the standard Dagster pattern: a
-`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME — an
+`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME, an
 ordinary env var read in this module. Dagster+ sets it automatically per
 deployment; on self-hosted OSS set it in the code location's environment;
 `dagster dev` leaves it unset, which defaults to "local".
@@ -28,7 +28,7 @@ from .checks import ALL_CHECKS
 from .io_manager import IbisIOManager
 from .resources import IbisResource
 
-# NOTE: latest_event_per_user uses window functions — it materializes on
+# NOTE: latest_event_per_user uses window functions; it materializes on
 # SQL backends (duckdb/pyspark/bigquery) and fails loudly at compile time on
 # polars. That boundary is intentional and covered in tests/README.
 all_assets = [
@@ -44,7 +44,7 @@ ibis_etl_job = dg.define_asset_job(
     "ibis_etl", selection=dg.AssetSelection.assets(*all_assets)
 )
 
-# The `dbt run` cron analog — starts stopped; toggle on in the UI or via
+# The `dbt run` cron analog. Starts stopped; toggle on in the UI or via
 # default_status=dg.DefaultStatus.RUNNING. (Declarative alternative for a
 # real deployment: AutoMaterializePolicy on the assets themselves.)
 daily_schedule = dg.ScheduleDefinition(job=ibis_etl_job, cron_schedule="0 6 * * *")

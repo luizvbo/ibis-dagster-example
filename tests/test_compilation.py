@@ -2,7 +2,7 @@
 
 `ibis.<backend>.compile()` instantiates the backend's compiler without
 connecting, so we can prove the same expressions compile for engines we
-can't run here (bigquery, pyspark — no credentials or JVM required).
+can't run here (bigquery, pyspark; no credentials or JVM required).
 This is the portability claim made executable in CI: an op a target
 dialect can't express fails here, before any deployment.
 """
@@ -37,7 +37,7 @@ TRANSFORMS = {
     "latest_event_per_user": transforms.latest_event_per_user(CLEANED),
 }
 
-# dialect fingerprints that differ per backend — the demo's "aha"
+# dialect fingerprints that differ per backend: the demo's "aha"
 DIALECT_FINGERPRINTS = {
     "duckdb": ["date_trunc", '"'],
     "pyspark": ["date_trunc", "`"],
@@ -72,7 +72,7 @@ def test_transforms_compile_to_dialect(backend):
 
 def test_windowed_transform_not_supported_on_polars():
     """Portability boundary, pinned in CI: ibis's polars backend cannot
-    translate WindowFunction — the same expression fails at translate
+    translate WindowFunction; the same expression fails at translate
     time with a named error. See transforms.latest_event_per_user_portable
     for a rewrite that runs everywhere."""
     from ibis.common.exceptions import OperationNotDefinedError
