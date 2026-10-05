@@ -36,6 +36,7 @@ src/ibis_dagster_example/
 data/                 # local CSV sources (data/lake/ parquet is generated — see seed-lake)
 scripts/seed_lake.py  # CSV -> parquet lake seeder for the prod deployment
 justfile              # dev / materialize / seed-lake / test shortcuts
+.pre-commit-config.yaml  # prek hooks at pre-push: ruff, ty, pytest
 tests/                # transform tests per backend + offline dialect compiles
 ```
 
@@ -199,3 +200,7 @@ just test   # = uv run pytest; duckdb + polars; pyspark auto-skips if not instal
 Covers the transforms on every backend plus full `dg.materialize` runs of
 the asset graph through the I/O manager — including a "prod-style" variant
 with parquet sources.
+
+Lint (ruff), formatting, type-checking (ty) and this suite also run as
+`prek`/`pre-commit` hooks at `git push` (`prek install --hook-type
+pre-push`, or `prek run --all-files` to run them now).
