@@ -39,7 +39,9 @@ tests/                # transform tests per backend + offline dialect compiles
 
 Asset graph: `events_csv` + `products_csv` (external sources) →
 `raw_events` / `raw_products` (bronze) → `cleaned_events` (silver) →
-`daily_active_users` + `category_revenue` (gold).
+`daily_active_users` + `category_revenue` + `latest_event_per_user` (gold).
+The last one uses window functions — SQL backends only, see
+[Portability boundaries](#portability-boundaries).
 
 ## Quickstart
 
@@ -61,6 +63,10 @@ Headless:
 DAGSTER_DEPLOYMENT_NAME=polars uv run dagster asset materialize \
     -m ibis_dagster_example.definitions --select "*"
 ```
+
+(One expected failure on the `polars` deployment: `latest_event_per_user`
+uses window functions, which ibis's polars backend can't translate — see
+below. The rest of the graph still materializes.)
 
 ## How environments work
 
@@ -128,6 +134,36 @@ downstream assets don't materialize if it fails.
 
 Because both resources are `ConfigurableResource`s, every field can also be
 overridden per-run in the Dagster Launchpad.
+
+## Portability boundaries
+
+"Backend-agnostic" means *portable across the ops a backend can express* —
+not that every expression runs everywhere. The demo deliberately includes
+one non-portable asset to show what the boundary looks like:
+
+- `transforms.latest_event_per_user` uses `row_number().over(...)`. Ibis's
+  polars backend has **no** `WindowFunction` translation (polars's native
+  `.over()` isn't wired up), so on the `polars` deployment that asset fails
+  with `OperationNotDefinedError: No translation rule for WindowFunction`.
+- The failure is the good kind: it happens at translate time — before any
+  data is processed — is deterministic, and names the missing op. It also
+  means the compile test (`test_windowed_transform_not_supported_on_polars`)
+  can pin the boundary in CI.
+
+When a real project hits this, the options are:
+
+1. **Rewrite portably** — often possible at some verbosity cost.
+   `latest_event_per_user_portable` produces the same result with
+   `group_by` + `inner_join`, and runs on every backend.
+2. **Localize a backend branch** — inside a transform you can inspect the
+   bound backend (`ibis.get_backend(t).name`) and shim one engine; ugly,
+   but contained to one function.
+3. **Keep the asset engine-scoped** — accept that a deployment can't
+   materialize it (separate job, or document the failure as here).
+
+Ibis maintains a per-backend [operations support matrix](
+https://ibis-project.org/backends/support/matrix) — check it before
+betting a codebase on a portability claim.
 
 ## Engine notes
 

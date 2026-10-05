@@ -47,3 +47,15 @@ def daily_active_users(cleaned_events: ir.Table) -> ir.Table:
 def category_revenue(cleaned_events: ir.Table, raw_products: ir.Table) -> ir.Table:
     """Revenue per product category (purchase events joined to products)."""
     return transforms.category_revenue(cleaned_events, raw_products)
+
+
+@dg.asset(group_name="gold", kinds={"ibis"})
+def latest_event_per_user(cleaned_events: ir.Table) -> ir.Table:
+    """Most recent event per user — window functions, SQL backends only.
+
+    Intentionally non-portable: this materializes on duckdb/pyspark and
+    fails loudly at compile time on polars (OperationNotDefinedError —
+    windows aren't implemented in ibis's polars backend). For a portable
+    equivalent see transforms.latest_event_per_user_portable.
+    """
+    return transforms.latest_event_per_user(cleaned_events)

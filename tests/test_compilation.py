@@ -34,6 +34,7 @@ TRANSFORMS = {
     "cleaned_events": CLEANED,
     "daily_active_users": transforms.daily_active_users(CLEANED),
     "category_revenue": transforms.category_revenue(CLEANED, PRODUCTS),
+    "latest_event_per_user": transforms.latest_event_per_user(CLEANED),
 }
 
 # dialect fingerprints that differ per backend — the demo's "aha"
@@ -64,3 +65,22 @@ def test_transforms_compile_to_dialect(backend):
     joined = " ".join(sql_by_name.values()).lower()
     for fingerprint in DIALECT_FINGERPRINTS[backend]:
         assert fingerprint in joined, f"{backend} SQL missing {fingerprint!r}"
+
+    # the windowed transform must render ROW_NUMBER() OVER (...) per dialect
+    assert "row_number" in sql_by_name["latest_event_per_user"].lower()
+
+
+def test_windowed_transform_not_supported_on_polars():
+    """Portability boundary, pinned in CI: ibis's polars backend cannot
+    translate WindowFunction — the same expression fails at translate
+    time with a named error. See transforms.latest_event_per_user_portable
+    for a rewrite that runs everywhere."""
+    from ibis.common.exceptions import OperationNotDefinedError
+
+    from ibis_dagster_example import data
+
+    con = ibis.polars.connect()
+    raw = con.create_table("raw_events", data.raw_events, overwrite=True)
+    cleaned = con.create_table("cleaned_events", transforms.clean_events(raw))
+    with pytest.raises(OperationNotDefinedError):
+        con.execute(transforms.latest_event_per_user(cleaned))
