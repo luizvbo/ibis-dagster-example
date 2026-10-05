@@ -26,6 +26,13 @@ repos:
         args: [--fix]
       - id: ruff-format
 
+  # type check — resolves deps from pyproject.toml, env pinned by
+  # [tool.ty.environment] python = ".venv"
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.84
+    hooks:
+      - id: ty
+
   # tests — too slow for per-commit, right-sized for pre-push. Runs in
   # the project env (uv), so it needs no isolated hook env.
   - repo: local

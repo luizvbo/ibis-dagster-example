@@ -4,6 +4,7 @@ backend and assert identical results — the portability contract.
 
 import dagster as dg
 import ibis
+import ibis.common.exceptions
 import pytest
 
 from ibis_dagster_example import data, transforms

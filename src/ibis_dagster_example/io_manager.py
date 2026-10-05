@@ -52,7 +52,7 @@ class IbisIOManager(dg.ConfigurableIOManager):
         metadata = {
             "ibis_backend": con.name,
             "table": name,
-            "row_count": int(created.count().execute()),
+            "row_count": int(created.count().execute()),  # ty: ignore[invalid-argument-type] — scalar .execute() is typed DataFrame|Series|Any
             "preview": dg.MetadataValue.md(
                 created.head(10).execute().to_markdown(index=False)
             ),

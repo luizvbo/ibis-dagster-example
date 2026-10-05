@@ -21,12 +21,12 @@ from .resources import IbisResource
 def _violations(ibis: IbisResource, table: str, predicate) -> int:
     """Count rows in `table` matching `predicate` on the run's backend."""
     con = ibis.connect()
-    return int(con.table(table).filter(predicate).count().execute())
+    return int(con.table(table).filter(predicate).count().execute())  # ty: ignore[invalid-argument-type] — scalar .execute() is typed DataFrame|Series|Any
 
 
 @dg.asset_check(asset=raw_events, description="raw_events has rows")
 def raw_events_not_empty(ibis: IbisResource) -> dg.AssetCheckResult:
-    n = int(ibis.connect().table("raw_events").count().execute())
+    n = int(ibis.connect().table("raw_events").count().execute())  # ty: ignore[invalid-argument-type]
     return dg.AssetCheckResult(passed=n > 0, metadata={"row_count": n})
 
 

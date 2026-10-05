@@ -37,7 +37,7 @@ def daily_active_users(cleaned_events: ir.Table) -> ir.Table:
         .agg(
             n_events=_.count(),
             n_active_users=_.user_id.nunique(),
-            n_purchases=ibis.ifelse(_.event_type == "purchase", 1, 0).sum(),
+            n_purchases=ibis.ifelse(_.event_type == "purchase", 1, 0).sum(),  # ty: ignore[unresolved-attribute] — ifelse() is typed as generic Value
         )
         .order_by("date")
     )
