@@ -12,6 +12,7 @@ from ibis_dagster_example.assets import (
     category_revenue,
     cleaned_events,
     daily_active_users,
+    latest_event_per_user,
     raw_events,
     raw_products,
 )
@@ -98,11 +99,31 @@ def test_category_revenue(con, cleaned):
     assert df.loc["office", "revenue"] == pytest.approx(5.75)
 
 
+def test_latest_event_per_user_windowed(con, cleaned):
+    """Window functions run on SQL backends and fail loudly on polars —
+    OperationNotDefinedError at translate time, before touching data."""
+    expr = transforms.latest_event_per_user(cleaned)
+    if con.name == "polars":
+        with pytest.raises(ibis.common.exceptions.OperationNotDefinedError):
+            expr.execute()
+        return
+    df = expr.execute()
+    assert len(df) == 5
+    assert set(df["event_id"]) == {7, 8, 10, 11, 12}
+
+
+def test_latest_event_per_user_portable(con, cleaned):
+    """The group_by+join rewrite produces the same result on every backend."""
+    df = transforms.latest_event_per_user_portable(cleaned).execute()
+    assert len(df) == 5
+    assert set(df["event_id"]) == {7, 8, 10, 11, 12}
+
+
 def test_full_pipeline_on_duckdb(tmp_path):
     """Materialize the whole asset graph through the IO manager."""
     db = tmp_path / "warehouse.duckdb"
     result = dg.materialize(
-        ALL_ASSETS,
+        [*ALL_ASSETS, latest_event_per_user],
         resources={
             "io_manager": IbisIOManager(
                 ibis=IbisResource(backend="duckdb", duckdb_path=str(db)),
@@ -114,6 +135,7 @@ def test_full_pipeline_on_duckdb(tmp_path):
     check = ibis.duckdb.connect(str(db))
     assert check.table("category_revenue").count().execute() == 3
     assert check.table("cleaned_events").count().execute() == 12
+    assert check.table("latest_event_per_user").count().execute() == 5
 
 
 def test_full_pipeline_on_polars():
@@ -130,6 +152,22 @@ def test_full_pipeline_on_polars():
     mat = result.asset_materializations_for_node("daily_active_users")[0]
     assert mat.metadata["row_count"].value == 2
     assert mat.metadata["ibis_backend"].value == "polars"
+
+
+def test_windowed_asset_fails_loudly_on_polars():
+    """Materializing the windowed asset on polars fails with a named,
+    translate-time error — the boundary is loud, not silent."""
+    with pytest.raises(
+        ibis.common.exceptions.OperationNotDefinedError, match="WindowFunction"
+    ):
+        dg.materialize(
+            [*ALL_ASSETS, latest_event_per_user],
+            resources={
+                "io_manager": IbisIOManager(
+                    ibis=IbisResource(backend="polars"), sources=CSV_SOURCES
+                )
+            },
+        )
 
 
 def test_asset_checks_all_pass(tmp_path):

@@ -18,6 +18,7 @@ from .assets import (
     category_revenue,
     cleaned_events,
     daily_active_users,
+    latest_event_per_user,
     raw_events,
     raw_products,
 )
@@ -25,12 +26,16 @@ from .checks import ALL_CHECKS
 from .io_manager import IbisIOManager
 from .resources import IbisResource
 
+# NOTE: latest_event_per_user uses window functions — it materializes on
+# SQL backends (duckdb/pyspark/bigquery) and fails loudly at compile time on
+# polars. That boundary is intentional and covered in tests/README.
 all_assets = [
     raw_events,
     raw_products,
     cleaned_events,
     daily_active_users,
     category_revenue,
+    latest_event_per_user,
 ]
 
 ibis_etl_job = dg.define_asset_job(

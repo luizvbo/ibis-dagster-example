@@ -58,3 +58,31 @@ def category_revenue(cleaned_events: ir.Table, products: ir.Table) -> ir.Table:
         )
         .order_by(_.revenue.desc())
     )
+
+
+def latest_event_per_user(events: ir.Table) -> ir.Table:
+    """Most recent event per user, via a row_number window.
+
+    NOT portable: the ibis polars backend has no WindowFunction translation
+    (polars's native .over() isn't wired up). Compiles/runs on duckdb,
+    pyspark, bigquery — raises OperationNotDefinedError on polars at
+    compile time. See latest_event_per_user_portable for the fallback.
+    """
+    return (
+        events.mutate(
+            rn=ibis.row_number().over(
+                ibis.window(group_by="user_id", order_by=_.ts.desc())
+            )
+        )
+        .filter(_.rn == 0)  # ibis's row_number() is zero-based
+        .drop("rn")
+    )
+
+
+def latest_event_per_user_portable(events: ir.Table) -> ir.Table:
+    """Same result, no window functions — runs on every backend
+    (group_by + join instead of row_number)."""
+    latest = events.group_by("user_id").agg(latest_ts=_.ts.max())
+    return events.inner_join(latest, "user_id").filter(_.ts == _.latest_ts).drop(
+        "latest_ts"
+    )
