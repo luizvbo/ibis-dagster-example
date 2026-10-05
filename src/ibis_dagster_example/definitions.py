@@ -47,9 +47,7 @@ ibis_etl_job = dg.define_asset_job(
 # The `dbt run` cron analog — starts stopped; toggle on in the UI or via
 # default_status=dg.DefaultStatus.RUNNING. (Declarative alternative for a
 # real deployment: AutoMaterializePolicy on the assets themselves.)
-daily_schedule = dg.ScheduleDefinition(
-    job=ibis_etl_job, cron_schedule="0 6 * * *"
-)
+daily_schedule = dg.ScheduleDefinition(job=ibis_etl_job, cron_schedule="0 6 * * *")
 
 CSV_SOURCES = {
     "events_csv": {"format": "csv", "path": "data/raw_events.csv"},
@@ -66,6 +64,7 @@ LAKE_SOURCES = {
         "path": "${DATA_LAKE}/landing/products/",
     },
 }
+
 
 def _deployment(ibis: IbisResource, sources: dict) -> dict:
     # bind the same IbisResource instance to both keys: the io manager uses it

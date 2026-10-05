@@ -30,9 +30,7 @@ def raw_events_not_empty(ibis: IbisResource) -> dg.AssetCheckResult:
     return dg.AssetCheckResult(passed=n > 0, metadata={"row_count": n})
 
 
-@dg.asset_check(
-    asset=raw_products, description="product_id is unique in raw_products"
-)
+@dg.asset_check(asset=raw_products, description="product_id is unique in raw_products")
 def raw_products_unique_product_id(ibis: IbisResource) -> dg.AssetCheckResult:
     t = ibis.connect().table("raw_products")
     dupes = int(t.count().execute() - t.product_id.nunique().execute())
@@ -99,9 +97,7 @@ def daily_active_users_consistent_counts(
     asset=category_revenue, description="revenue and n_orders are non-negative"
 )
 def category_revenue_non_negative(ibis: IbisResource) -> dg.AssetCheckResult:
-    n = _violations(
-        ibis, "category_revenue", (_.revenue < 0) | (_.n_orders <= 0)
-    )
+    n = _violations(ibis, "category_revenue", (_.revenue < 0) | (_.n_orders <= 0))
     return dg.AssetCheckResult(passed=n == 0, metadata={"violations": n})
 
 

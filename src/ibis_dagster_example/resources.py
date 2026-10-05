@@ -5,10 +5,11 @@ resource for an `ibis` connection and write portable Ibis expressions.
 Switching engines is pure configuration (`backend` field).
 """
 
+from functools import lru_cache
+
 import dagster as dg
 import ibis
 from ibis.backends import BaseBackend
-from functools import lru_cache
 
 
 class IbisResource(dg.ConfigurableResource):

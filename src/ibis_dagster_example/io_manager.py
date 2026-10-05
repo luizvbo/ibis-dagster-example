@@ -12,10 +12,12 @@ Different deployments bind differently-configured instances of this manager
 """
 
 import os
+from contextlib import suppress
 
 import dagster as dg
 from ibis.backends import BaseBackend
 from ibis.expr import types as ir
+from pydantic import Field
 
 from .resources import IbisResource
 
@@ -31,7 +33,7 @@ class IbisIOManager(dg.ConfigurableIOManager):
     #   {"events_csv": {"format": "csv",  "path": "data/raw_events.csv"}}
     #   {"events":     {"format": "table", "name": "landing.events"}}
     # "path" values support ${ENV_VAR} expansion.
-    sources: dict = {}
+    sources: dict = Field(default_factory=dict)
 
     # optional namespace for pipeline tables (duckdb "catalog.db" / spark db)
     database: str | None = None
@@ -57,12 +59,8 @@ class IbisIOManager(dg.ConfigurableIOManager):
         }
         # SQL backends can show the compiled SQL — a nice way to demo that
         # Ibis compiles the same expression to different dialects/engines.
-        try:
-            metadata["compiled"] = dg.MetadataValue.md(
-                f"```\n{con.compile(obj)}\n```"
-            )
-        except Exception:
-            pass
+        with suppress(Exception):
+            metadata["compiled"] = dg.MetadataValue.md(f"```\n{con.compile(obj)}\n```")
         context.add_output_metadata(metadata)
 
     def load_input(self, context: dg.InputContext) -> ir.Table:

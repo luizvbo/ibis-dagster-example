@@ -24,9 +24,7 @@ def clean_events(raw_events: ir.Table) -> ir.Table:
         event_type=_.event_type.lower().strip(),
     )
     return (
-        normalized.mutate(
-            amount=_.amount.fill_null(0.0), date=_.ts.truncate("D")
-        )
+        normalized.mutate(amount=_.amount.fill_null(0.0), date=_.ts.truncate("D"))
         .filter(_.event_id.notnull(), _.user_id.notnull())
         .distinct()
     )
@@ -83,6 +81,8 @@ def latest_event_per_user_portable(events: ir.Table) -> ir.Table:
     """Same result, no window functions — runs on every backend
     (group_by + join instead of row_number)."""
     latest = events.group_by("user_id").agg(latest_ts=_.ts.max())
-    return events.inner_join(latest, "user_id").filter(_.ts == _.latest_ts).drop(
-        "latest_ts"
+    return (
+        events.inner_join(latest, "user_id")
+        .filter(_.ts == _.latest_ts)
+        .drop("latest_ts")
     )

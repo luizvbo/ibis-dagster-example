@@ -89,11 +89,7 @@ def test_daily_active_users(con, cleaned):
 
 def test_category_revenue(con, cleaned):
     products = con.create_table("raw_products", data.raw_products, overwrite=True)
-    df = (
-        transforms.category_revenue(cleaned, products)
-        .execute()
-        .set_index("category")
-    )
+    df = transforms.category_revenue(cleaned, products).execute().set_index("category")
     assert df.loc["electronics", "n_orders"] == 3
     assert df.loc["electronics", "revenue"] == pytest.approx(198.80)
     assert df.loc["office", "revenue"] == pytest.approx(5.75)
@@ -193,9 +189,7 @@ def test_pipeline_with_prod_style_parquet_sources(tmp_path):
     (lake / "landing").mkdir(parents=True)
     seed = ibis.duckdb.connect()
     seed.read_csv("data/raw_events.csv").to_parquet(str(lake / "landing/events"))
-    seed.read_csv("data/raw_products.csv").to_parquet(
-        str(lake / "landing/products")
-    )
+    seed.read_csv("data/raw_products.csv").to_parquet(str(lake / "landing/products"))
 
     db = tmp_path / "prod.duckdb"
     result = dg.materialize(

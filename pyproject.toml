@@ -18,6 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# ibis pins pyspark<4.1 for now; Spark 4.0 runs on JDK 17/21 only (on
+# JDK 23+ startup fails with `getSubject is not supported`). Spark 4.2
+# adds Java 25 support, so a future ibis release lifts the restriction.
 pyspark = ["ibis-framework[pyspark]>=10"]
 # dev pulls the pyspark + bigquery extras so the compile tests can check
 # dialect output without needing a JVM or credentials
@@ -33,3 +36,12 @@ packages = ["src/ibis_dagster_example"]
 
 [tool.dagster]
 module_name = "ibis_dagster_example.definitions"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# memtable fixtures: naive datetimes mirror the CSV sources' schema
+"src/ibis_dagster_example/data.py" = ["DTZ001"]
+# helpers skip a backend on ANY start failure — blind except is intentional
+"tests/**" = ["BLE001"]

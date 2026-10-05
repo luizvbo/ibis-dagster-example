@@ -1,0 +1,38 @@
+# prek (or pre-commit) hooks — configured for `git push`, not `git commit`:
+#
+#   prek install --hook-type pre-push    # one-time install
+#   prek run --all-files                 # run everything over the tree
+
+default_stages: [pre-push]
+default_install_hook_types: [pre-push]
+
+repos:
+  # generic hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  # lint + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # tests — too slow for per-commit, right-sized for pre-push. Runs in
+  # the project env (uv), so it needs no isolated hook env.
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -x -q
+        language: system
+        pass_filenames: false
+        always_run: true
