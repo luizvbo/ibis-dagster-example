@@ -1,8 +1,10 @@
 """Dagster definitions.
 
 Environment selection follows the standard Dagster pattern: a
-`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME (set
-automatically by Dagster+; export it yourself for `dagster dev`).
+`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME — an
+ordinary env var read in this module. Dagster+ sets it automatically per
+deployment; on self-hosted OSS set it in the code location's environment;
+`dagster dev` leaves it unset, which defaults to "local".
 
     DAGSTER_DEPLOYMENT_NAME=local   dagster dev   # duckdb + csv files
     DAGSTER_DEPLOYMENT_NAME=polars  dagster dev   # polars (in-memory) + csvs

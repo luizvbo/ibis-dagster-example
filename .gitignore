@@ -221,6 +221,7 @@ __marimo__/
 *.duckdb
 *.duckdb.wal
 .dagster/
+data/lake/
 spark-warehouse/
 metastore_db/
 derby.log

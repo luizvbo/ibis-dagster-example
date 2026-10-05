@@ -13,13 +13,13 @@ resource configuration, following the standard Dagster patterns:
   differently-configured I/O manager + backend resource per environment —
   the documented Dagster equivalent of a per-env data catalog.
 
-```
-asset graph (dagster)          assets: pure ibis exprs (ir.Table -> ir.Table)
-        │                                   │
-        ▼                                   ▼
-   IbisIOManager  ──load_input/handle_output──►  con.read_*/con.table/create_table
-        │  ▲ sources={...} per deployment
-        └── IbisResource.connect()  (duckdb | polars | pyspark)
+```mermaid
+flowchart TD
+    dagster["asset graph (dagster)"] --> io["IbisIOManager"]
+    assets["assets: pure ibis exprs (ir.Table → ir.Table)"] --> io
+    res["IbisResource.connect() → duckdb | polars | pyspark"] --> io
+    io -- "load_input / handle_output" --> con["con.read_* / con.table / con.create_table"]
+    io -. "sources={...} per deployment" .-> con
 ```
 
 ## Layout
@@ -33,7 +33,9 @@ src/ibis_dagster_example/
 ├── checks.py         # asset checks (dbt-test equivalents) as ibis exprs
 ├── data.py           # memtable fixtures (unit tests only)
 └── definitions.py    # defs + resources_by_deployment + daily schedule
-data/                 # local CSV sources
+data/                 # local CSV sources (data/lake/ parquet is generated — see seed-lake)
+scripts/seed_lake.py  # CSV -> parquet lake seeder for the prod deployment
+justfile              # dev / materialize / seed-lake / test shortcuts
 tests/                # transform tests per backend + offline dialect compiles
 ```
 
@@ -46,22 +48,30 @@ The last one uses window functions — SQL backends only, see
 ## Quickstart
 
 ```bash
-uv run dagster dev   # defaults to DAGSTER_DEPLOYMENT_NAME=local (duckdb)
+just dev   # = DAGSTER_DEPLOYMENT_NAME=local uv run dagster dev (duckdb)
 ```
 
-Pick the deployment — engine and storage switch together:
+Pick the deployment — engine and storage switch together. The `just`
+recipes are thin shortcuts; each expands to the raw command shown, which
+works as-is without `just` installed:
 
 ```bash
-DAGSTER_DEPLOYMENT_NAME=local   uv run dagster dev                    # duckdb + csv
-DAGSTER_DEPLOYMENT_NAME=polars  uv run dagster dev                    # polars + csv
-DAGSTER_DEPLOYMENT_NAME=prod    uv run --extra pyspark dagster dev    # pyspark + lake parquet (needs JDK)
+just dev local    # DAGSTER_DEPLOYMENT_NAME=local   uv run dagster dev                 — duckdb + csv
+just dev polars   # DAGSTER_DEPLOYMENT_NAME=polars  uv run dagster dev                 — polars + csv
+just dev prod     # DAGSTER_DEPLOYMENT_NAME=prod    uv run --extra pyspark dagster dev — pyspark + parquet (needs JDK)
 ```
+
+`dev prod` also needs parquet lake sources: the recipe first seeds
+`data/lake/` from the CSVs (point `DATA_LAKE` elsewhere to use a real
+lake). By hand: `uv run python scripts/seed_lake.py`, then export
+`DATA_LAKE=data/lake`.
 
 Headless:
 
 ```bash
-DAGSTER_DEPLOYMENT_NAME=polars uv run dagster asset materialize \
-    -m ibis_dagster_example.definitions --select "*"
+just materialize polars
+# = DAGSTER_DEPLOYMENT_NAME=polars uv run dagster asset materialize \
+#     -m ibis_dagster_example.definitions --select "*"
 ```
 
 (One expected failure on the `polars` deployment: `latest_event_per_user`
@@ -81,8 +91,11 @@ resources_by_deployment = {
 }
 ```
 
-`DAGSTER_DEPLOYMENT_NAME` is set automatically by Dagster+ (`prod`,
-`staging`, branch deployments); for `dagster dev` export it yourself.
+`DAGSTER_DEPLOYMENT_NAME` is just an env var `definitions.py` reads
+itself — Dagster+ sets it automatically per deployment (`prod`,
+`staging`, branch deployments); on a self-hosted OSS deployment set it in
+the code location's environment (k8s/docker env, systemd unit); for
+`dagster dev` export it yourself — unset defaults to `local`.
 
 **Sources** — `IbisIOManager.sources` maps upstream asset names to reads:
 
@@ -174,12 +187,13 @@ betting a codebase on a portability claim.
 - **pyspark** — lazily imported inside `connect()`; needs a JDK and the
   `pyspark` extra (`uv sync --extra pyspark`). `SPARK_MASTER` /
   `SPARK_WAREHOUSE_DIR` env vars configure it; point `SPARK_MASTER` at a
-  cluster or Spark Connect URL.
+  cluster or Spark Connect URL. Sources are parquet under `DATA_LAKE`;
+  `just seed-lake` writes a local lake at `data/lake/` from the CSVs.
 
 ## Tests
 
 ```bash
-uv run pytest   # duckdb + polars; pyspark auto-skips if not installed
+just test   # = uv run pytest; duckdb + polars; pyspark auto-skips if not installed
 ```
 
 Covers the transforms on every backend plus full `dg.materialize` runs of

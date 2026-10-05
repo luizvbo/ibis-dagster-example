@@ -48,18 +48,31 @@ Repo: <!-- TODO: link to the repo -->
 
 A deliberately ordinary bronze → silver → gold pipeline:
 
-```
-events_csv + products_csv            (external sources: csv locally, parquet/tables in production)
-       │
-       ▼
-raw_events, raw_products             (bronze: land sources into managed tables)
-       │
-       ▼
-cleaned_events                       (silver: normalize types, trim/lower, dedupe, validate)
-       │
-       ├──► daily_active_users       (gold: group_by + agg)
-       ├──► category_revenue         (gold: join + group_by + agg)
-       └──► latest_event_per_user    (gold: row_number window, deliberately not portable*)
+```mermaid
+flowchart TD
+    subgraph sources["external sources — csv locally, parquet/tables in production"]
+        events_csv
+        products_csv
+    end
+    subgraph bronze["bronze — land sources into managed tables"]
+        raw_events
+        raw_products
+    end
+    subgraph silver["silver — normalize types, trim/lower, dedupe, validate"]
+        cleaned_events
+    end
+    subgraph gold
+        daily_active_users
+        category_revenue
+        latest_event_per_user["latest_event_per_user *"]
+    end
+    events_csv --> raw_events
+    products_csv --> raw_products
+    raw_events --> cleaned_events
+    cleaned_events --> daily_active_users
+    cleaned_events --> category_revenue
+    raw_products --> category_revenue
+    cleaned_events --> latest_event_per_user
 ```
 
 \* we'll come back to that asterisk. It's the most interesting part.
@@ -74,7 +87,7 @@ DAGSTER_DEPLOYMENT_NAME=polars dagster dev   # polars + same CSVs
 DAGSTER_DEPLOYMENT_NAME=prod   dagster dev   # pyspark + parquet "lake" sources
 ```
 
-Same code. Same asset graph. Same checks. Different engine and different storage, selected by deployment config, the documented Dagster pattern (`resources_by_deployment`, keyed on `DAGSTER_DEPLOYMENT_NAME`, which Dagster+ sets automatically).
+Same code. Same asset graph. Same checks. Different engine and different storage, selected by deployment config, the documented Dagster pattern (`resources_by_deployment`, keyed on `DAGSTER_DEPLOYMENT_NAME` — Dagster+ sets it automatically; on a self-hosted OSS deployment it's just another env var on your code location).
 
 ## The three pieces
 
