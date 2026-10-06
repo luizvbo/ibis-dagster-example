@@ -6,6 +6,7 @@ import dagster as dg
 import ibis
 import ibis.common.exceptions
 import pytest
+from ibis import _
 
 from ibis_dagster_example import data, transforms
 from ibis_dagster_example.assets import (
@@ -51,8 +52,9 @@ def _connect(backend: str):
                 .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse-test")
                 .getOrCreate()
             )
-        except Exception:
-            pytest.skip("pyspark installed but no JVM available")
+        except Exception as exc:
+            # spark can't start without a JDK on $JAVA_HOME
+            pytest.skip(f"pyspark session failed to start: {type(exc).__name__}: {exc}")
         return ibis.pyspark.connect(session)
     raise ValueError(backend)
 
@@ -114,6 +116,32 @@ def test_latest_event_per_user_portable(con, cleaned):
     df = transforms.latest_event_per_user_portable(cleaned).execute()
     assert len(df) == 5
     assert set(df["event_id"]) == {7, 8, 10, 11, 12}
+
+
+def test_latest_event_per_user_tied_timestamps(con):
+    """Tied max timestamps per user: both implementations pick the same
+    deterministic winner (largest event_id)."""
+    tied = ibis.memtable(
+        [
+            {"event_id": 1, "user_id": "u1", "ts": "2024-01-02 10:00"},
+            {"event_id": 3, "user_id": "u1", "ts": "2024-01-02 10:00"},
+            {"event_id": 2, "user_id": "u1", "ts": "2024-01-02 10:00"},
+            {"event_id": 4, "user_id": "u2", "ts": "2024-01-01 09:00"},
+        ]
+    ).mutate(ts=_.ts.cast("timestamp"))
+    expected = {"u1": 3, "u2": 4}
+
+    portable = transforms.latest_event_per_user_portable(tied)
+    df = con.execute(portable)
+    assert dict(zip(df["user_id"], df["event_id"])) == expected
+
+    windowed = transforms.latest_event_per_user(tied)
+    if con.name == "polars":
+        with pytest.raises(ibis.common.exceptions.OperationNotDefinedError):
+            con.execute(windowed)
+        return
+    df = con.execute(windowed)
+    assert dict(zip(df["user_id"], df["event_id"])) == expected
 
 
 def test_full_pipeline_on_duckdb(tmp_path):
@@ -181,6 +209,26 @@ def test_asset_checks_all_pass(tmp_path):
     evals = result.get_asset_check_evaluations()
     assert len(evals) == len(ALL_CHECKS)
     assert all(e.passed for e in evals)
+
+
+def test_unresolved_env_var_in_source_path_fails_clearly():
+    """An unset ${VAR} in a source path fails at the config boundary with a
+    clear error, not as a backend "file not found" on the literal path."""
+    with pytest.raises(ValueError, match="Unresolved environment variable"):
+        dg.materialize(
+            [*SOURCE_SPECS, raw_events],
+            resources={
+                "io_manager": IbisIOManager(
+                    ibis=IbisResource(backend="duckdb", duckdb_path=":memory:"),
+                    sources={
+                        "events_csv": {
+                            "format": "csv",
+                            "path": "${IBIS_DEMO_UNSET_VAR}/e.csv",
+                        }
+                    },
+                )
+            },
+        )
 
 
 def test_pipeline_with_prod_style_parquet_sources(tmp_path):

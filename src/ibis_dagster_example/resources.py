@@ -10,6 +10,7 @@ from functools import lru_cache
 import dagster as dg
 import ibis
 from ibis.backends import BaseBackend
+from ibis.expr import types as ir
 
 
 class IbisResource(dg.ConfigurableResource):
@@ -26,6 +27,10 @@ class IbisResource(dg.ConfigurableResource):
         Spark Connect URL via spark.remote).
     spark_warehouse_dir
         `spark.sql.warehouse.dir`, where Spark persists managed tables.
+    database
+        Optional namespace for pipeline tables (e.g. a duckdb
+        "catalog.db" or a spark database). Shared by the io manager and
+        the asset checks so both address the same physical tables.
     """
 
     backend: str = "duckdb"
@@ -33,6 +38,7 @@ class IbisResource(dg.ConfigurableResource):
     duckdb_path: str = "warehouse.duckdb"
     spark_master: str = "local[*]"
     spark_warehouse_dir: str = "./spark-warehouse"
+    database: str | None = None
 
     def connect(self) -> BaseBackend:
         """Return the process-wide Ibis connection for this configuration.
@@ -48,6 +54,11 @@ class IbisResource(dg.ConfigurableResource):
             self.spark_master,
             self.spark_warehouse_dir,
         )
+
+    def table(self, name: str) -> ir.Table:
+        """`con.table(name)` in the configured namespace, if any."""
+        kwargs = {"database": self.database} if self.database else {}
+        return self.connect().table(name, **kwargs)
 
 
 @lru_cache(maxsize=8)

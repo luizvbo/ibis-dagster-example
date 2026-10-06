@@ -27,7 +27,7 @@ flowchart LR
 
 ```
 src/ibis_dagster_example/
-├── resources.py      # IbisResource: engine connection (cached per run)
+├── resources.py      # IbisResource: engine connection (cached per process)
 ├── io_manager.py     # IbisIOManager: asset<->table IO + source config
 ├── transforms.py     # the actual logic: pure, backend-agnostic ibis exprs
 ├── assets.py         # dagster assets: ir.Table in, ir.Table out

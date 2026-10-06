@@ -69,7 +69,10 @@ def latest_event_per_user(events: ir.Table) -> ir.Table:
     return (
         events.mutate(
             rn=ibis.row_number().over(
-                ibis.window(group_by="user_id", order_by=_.ts.desc())
+                # event_id breaks ts ties, so the winner is deterministic
+                ibis.window(
+                    group_by="user_id", order_by=[_.ts.desc(), _.event_id.desc()]
+                )
             )
         )
         .filter(_.rn == 0)  # ibis's row_number() is zero-based
@@ -78,11 +81,15 @@ def latest_event_per_user(events: ir.Table) -> ir.Table:
 
 
 def latest_event_per_user_portable(events: ir.Table) -> ir.Table:
-    """Same result, no window functions; runs on every backend
-    (group_by + join instead of row_number)."""
-    latest = events.group_by("user_id").agg(latest_ts=_.ts.max())
-    return (
-        events.inner_join(latest, "user_id")
-        .filter(_.ts == _.latest_ts)
-        .drop("latest_ts")
-    )
+    """Same result, no window functions; runs on every backend.
+
+    group_by + join instead of row_number. Tied timestamps are resolved
+    the same way as the windowed version: largest event_id wins. That
+    takes a second aggregation and join; max(ts) alone would return all
+    tied rows, and a naive max(event_id) in the same agg could pick an
+    event_id from a different timestamp.
+    """
+    latest_ts = events.group_by("user_id").agg(latest_ts=_.ts.max())
+    candidates = events.inner_join(latest_ts, "user_id").filter(_.ts == _.latest_ts)
+    winners = candidates.group_by("user_id").agg(event_id=_.event_id.max())
+    return candidates.inner_join(winners, ["user_id", "event_id"]).drop("latest_ts")

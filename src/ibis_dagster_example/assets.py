@@ -14,8 +14,9 @@ from . import transforms
 # External (non-materializable) upstream sources. The IO manager maps each
 # name to a physical read via its `sources` config (per deployment).
 SOURCE_SPECS = [
-    dg.AssetSpec("events_csv", group_name="sources", kinds={"csv"}),
-    dg.AssetSpec("products_csv", group_name="sources", kinds={"csv"}),
+    # kind is storage-neutral: the same sources are csv locally, parquet in prod
+    dg.AssetSpec("events_csv", group_name="sources", kinds={"external"}),
+    dg.AssetSpec("products_csv", group_name="sources", kinds={"external"}),
 ]
 
 
@@ -56,6 +57,7 @@ def latest_event_per_user(cleaned_events: ir.Table) -> ir.Table:
     Intentionally non-portable: this materializes on duckdb/pyspark and
     fails loudly at compile time on polars (OperationNotDefinedError:
     windows aren't implemented in ibis's polars backend). For a portable
-    equivalent see transforms.latest_event_per_user_portable.
+    equivalent (same result incl. tie-breaks) see
+    transforms.latest_event_per_user_portable.
     """
     return transforms.latest_event_per_user(cleaned_events)

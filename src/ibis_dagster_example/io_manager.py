@@ -35,14 +35,12 @@ class IbisIOManager(dg.ConfigurableIOManager):
     # "path" values support ${ENV_VAR} expansion.
     sources: dict = Field(default_factory=dict)
 
-    # optional namespace for pipeline tables (duckdb "catalog.db" / spark db)
-    database: str | None = None
-
     def _con(self) -> BaseBackend:
         return self.ibis.connect()
 
     def _namespace(self) -> dict:
-        return {"database": self.database} if self.database else {}
+        # namespace lives on the resource: checks read the same tables
+        return {"database": self.ibis.database} if self.ibis.database else {}
 
     def handle_output(self, context: dg.OutputContext, obj: ir.Table) -> None:
         con = self._con()
@@ -60,7 +58,10 @@ class IbisIOManager(dg.ConfigurableIOManager):
         # SQL backends can show the compiled SQL, a nice way to demo that
         # Ibis compiles the same expression to different dialects/engines.
         with suppress(Exception):
-            metadata["compiled"] = dg.MetadataValue.md(f"```\n{con.compile(obj)}\n```")
+            sql = con.compile(obj)
+            # non-SQL backends return a plan object, not a SQL string
+            if isinstance(sql, str):
+                metadata["compiled"] = dg.MetadataValue.md(f"```\n{sql}\n```")
         context.add_output_metadata(metadata)
 
     def load_input(self, context: dg.InputContext) -> ir.Table:
@@ -70,11 +71,17 @@ class IbisIOManager(dg.ConfigurableIOManager):
         src = self.sources.get(name)
         if src is None:
             # regular pipeline table produced by an upstream asset
-            return con.table(name, **self._namespace())
+            return self.ibis.table(name)
 
         fmt = src["format"]
         if fmt == "table":  # an existing table in the backend's catalog
             return con.table(src.get("name", name))
         if fmt in _READERS:
-            return getattr(con, f"read_{fmt}")(os.path.expandvars(src["path"]))
+            path = os.path.expandvars(src["path"])
+            if "$" in path:
+                raise ValueError(
+                    f"Unresolved environment variable in source path "
+                    f"{src['path']!r} for {name!r}"
+                )
+            return getattr(con, f"read_{fmt}")(path)
         raise ValueError(f"Unknown source format {fmt!r} for {name!r}")
