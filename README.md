@@ -41,7 +41,7 @@ justfile              # dev / materialize / seed-lake / test shortcuts
 tests/                # transform tests per backend + offline dialect compiles
 ```
 
-Asset graph: `events_csv` + `products_csv` (external sources) →
+Asset graph: `events` + `products` (external sources) →
 `raw_events` / `raw_products` (bronze) → `cleaned_events` (silver) →
 `daily_active_users` + `category_revenue` + `latest_event_per_user` (gold).
 The last one uses window functions (SQL backends only), see
@@ -112,18 +112,22 @@ resources_by_deployment = {
 }
 ```
 
-`DAGSTER_DEPLOYMENT_NAME` is just an env var `definitions.py` reads
-itself. Dagster+ sets it automatically per deployment (`prod`,
-`staging`, branch deployments); on a self-hosted OSS deployment set it in
-the code location's environment (k8s/docker env, systemd unit); for
-`dagster dev` export it yourself; unset defaults to `local`.
+(`prod` here is production-shaped but still local: `local[*]` spark plus
+a seeded parquet dir, stand-ins for a real cluster and lake.)
+
+`DAGSTER_DEPLOYMENT_NAME` is an application-defined env var this repo
+reads itself; nothing sets it automatically. Configure it per deployment
+in Dagster+ (which auto-sets its own `DAGSTER_CLOUD_*` vars), set it in
+the code location's environment when self-hosting (k8s/docker env,
+systemd unit), or export it yourself for `dagster dev`. Unset defaults
+to `local`.
 
 **Sources**: `IbisIOManager.sources` maps upstream asset names to reads:
 
 ```python
-{"events_csv": {"format": "csv",     "path": "data/raw_events.csv"}}
-{"events_csv": {"format": "parquet", "path": "${DATA_LAKE}/landing/events/"}}
-{"events_csv": {"format": "table",   "name": "landing.events"}}  # existing table
+{"events": {"format": "csv",     "path": "data/raw_events.csv"}}
+{"events": {"format": "parquet", "path": "${DATA_LAKE}/landing/events/"}}
+{"events": {"format": "table",   "name": "events", "database": "landing"}}
 ```
 
 `format` ∈ `csv | parquet | json | delta | table`; `path` supports
@@ -132,8 +136,10 @@ the code location's environment (k8s/docker env, systemd unit); for
 
 **Outputs**: every materialized asset becomes `con.create_table(name,
 overwrite=True)` on the backend (`name` = asset key, optional `database`
-field namespaces them). Each materialization records `ibis_backend`,
-`row_count`, a `preview`, and the compiled SQL/plan as metadata.
+field namespaces them; asset keys are flattened to their last path
+component). Each materialization records `ibis_backend`, `row_count`, a
+`preview`, and the compiled SQL (when the backend produces SQL) as
+metadata.
 
 ## Data quality (the `dbt test` analog)
 
@@ -214,12 +220,13 @@ betting a codebase on a portability claim.
 ## Tests
 
 ```bash
-just test   # = uv run pytest; duckdb + polars; pyspark auto-skips if not installed
+just test   # = uv run pytest; duckdb + polars; pyspark auto-skips without a JVM
 ```
 
-Covers the transforms on every backend plus full `dg.materialize` runs of
-the asset graph through the I/O manager, including a "prod-style" variant
-with parquet sources.
+Transform behavior is covered across duckdb, polars, and pyspark (when a
+JVM is available); full `dg.materialize` runs of the asset graph run on
+duckdb and polars, plus a "prod-style" variant that exercises parquet
+source config on duckdb.
 
 Lint (ruff), formatting, type-checking (ty) and this suite also run as
 `prek`/`pre-commit` hooks at `git push` (`prek install --hook-type

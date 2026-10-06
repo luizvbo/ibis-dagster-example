@@ -1,10 +1,11 @@
 """Dagster definitions.
 
 Environment selection follows the standard Dagster pattern: a
-`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME, an
-ordinary env var read in this module. Dagster+ sets it automatically per
-deployment; on self-hosted OSS set it in the code location's environment;
-`dagster dev` leaves it unset, which defaults to "local".
+`resources_by_deployment` dict keyed on DAGSTER_DEPLOYMENT_NAME. That's an
+application-defined env var this example reads itself: nothing sets it
+automatically (Dagster+ auto-sets its own DAGSTER_CLOUD_* vars), so on
+Dagster+ configure it per deployment, and on self-hosted OSS set it in the
+code location's environment. `dagster dev` leaves it unset -> "local".
 
     DAGSTER_DEPLOYMENT_NAME=local   dagster dev   # duckdb + csv files
     DAGSTER_DEPLOYMENT_NAME=polars  dagster dev   # polars (in-memory) + csvs
@@ -50,16 +51,16 @@ ibis_etl_job = dg.define_asset_job(
 daily_schedule = dg.ScheduleDefinition(job=ibis_etl_job, cron_schedule="0 6 * * *")
 
 CSV_SOURCES = {
-    "events_csv": {"format": "csv", "path": "data/raw_events.csv"},
-    "products_csv": {"format": "csv", "path": "data/raw_products.csv"},
+    "events": {"format": "csv", "path": "data/raw_events.csv"},
+    "products": {"format": "csv", "path": "data/raw_products.csv"},
 }
 
 # production sources live in the data lake; ${DATA_LAKE} expands at run time.
-# swap "parquet" for {"format": "table", "name": "landing.events"} to read
-# existing hive-metastore tables instead.
+# swap "parquet" for {"format": "table", "name": "events", "database":
+# "landing"} to read existing hive-metastore tables instead.
 LAKE_SOURCES = {
-    "events_csv": {"format": "parquet", "path": "${DATA_LAKE}/landing/events/"},
-    "products_csv": {
+    "events": {"format": "parquet", "path": "${DATA_LAKE}/landing/events/"},
+    "products": {
         "format": "parquet",
         "path": "${DATA_LAKE}/landing/products/",
     },

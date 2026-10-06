@@ -14,22 +14,23 @@ from . import transforms
 # External (non-materializable) upstream sources. The IO manager maps each
 # name to a physical read via its `sources` config (per deployment).
 SOURCE_SPECS = [
-    # kind is storage-neutral: the same sources are csv locally, parquet in prod
-    dg.AssetSpec("events_csv", group_name="sources", kinds={"external"}),
-    dg.AssetSpec("products_csv", group_name="sources", kinds={"external"}),
+    # names stay storage-neutral: csv locally, parquet in prod, the io
+    # manager's `sources` config decides the physical read
+    dg.AssetSpec("events", group_name="sources", kinds={"external"}),
+    dg.AssetSpec("products", group_name="sources", kinds={"external"}),
 ]
 
 
 @dg.asset(group_name="bronze", kinds={"ibis"})
-def raw_events(events_csv: ir.Table) -> ir.Table:
+def raw_events(events: ir.Table) -> ir.Table:
     """Land the raw clickstream events source as a managed table."""
-    return events_csv
+    return events
 
 
 @dg.asset(group_name="bronze", kinds={"ibis"})
-def raw_products(products_csv: ir.Table) -> ir.Table:
+def raw_products(products: ir.Table) -> ir.Table:
     """Land the products dimension source as a managed table."""
-    return products_csv
+    return products
 
 
 @dg.asset(group_name="silver", kinds={"ibis"})

@@ -3,25 +3,45 @@
 Assets are pure functions `ir.Table -> ir.Table`; this manager owns all I/O:
 
 - `handle_output` persists the returned expression via `con.create_table`
+  (full refresh) and records row_count/preview metadata, two extra backend
+  queries per output, demo observability rather than a production default
 - `load_input`   hands downstream assets `con.table(<upstream asset>)`
 - `sources`      maps upstream (external) asset names to physical reads:
-                 `{"events_csv": {"format": "csv", "path": "..."}}`
+                 `{"events": {"format": "csv", "path": "..."}}`
 
 Different deployments bind differently-configured instances of this manager
 (see definitions.py): the Dagster equivalent of a per-environment catalog.
+
+Simplification for the demo: the asset key's last path component becomes the
+table name, so nested keys like "marketing/customers" + "finance/customers"
+would collide. A production version should map keys to catalog/schema/table.
 """
 
 import os
 from contextlib import suppress
+from typing import Literal
 
 import dagster as dg
 from ibis.backends import BaseBackend
 from ibis.expr import types as ir
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .resources import IbisResource
 
-_READERS = ("csv", "parquet", "json", "delta")  # con.read_<fmt>(path)
+
+class SourceSpec(dg.Config):
+    """One external source: a file read or an existing catalog table."""
+
+    format: Literal["csv", "parquet", "json", "delta", "table"]
+    path: str | None = None  # file formats; supports ${ENV_VAR} expansion
+    name: str | None = None  # "table" format; defaults to the asset name
+    database: str | None = None  # "table" format; source's catalog namespace
+
+    @model_validator(mode="after")
+    def _file_sources_require_path(self):
+        if self.format != "table" and not self.path:
+            raise ValueError(f"{self.format!r} sources require 'path'")
+        return self
 
 
 class IbisIOManager(dg.ConfigurableIOManager):
@@ -30,10 +50,10 @@ class IbisIOManager(dg.ConfigurableIOManager):
     ibis: dg.ResourceDependency[IbisResource]
 
     # external source specs, keyed by upstream asset name:
-    #   {"events_csv": {"format": "csv",  "path": "data/raw_events.csv"}}
-    #   {"events":     {"format": "table", "name": "landing.events"}}
+    #   {"events": {"format": "csv",   "path": "data/raw_events.csv"}}
+    #   {"events": {"format": "table", "name": "events", "database": "landing"}}
     # "path" values support ${ENV_VAR} expansion.
-    sources: dict = Field(default_factory=dict)
+    sources: dict[str, SourceSpec] = Field(default_factory=dict)
 
     def _con(self) -> BaseBackend:
         return self.ibis.connect()
@@ -73,15 +93,13 @@ class IbisIOManager(dg.ConfigurableIOManager):
             # regular pipeline table produced by an upstream asset
             return self.ibis.table(name)
 
-        fmt = src["format"]
-        if fmt == "table":  # an existing table in the backend's catalog
-            return con.table(src.get("name", name))
-        if fmt in _READERS:
-            path = os.path.expandvars(src["path"])
-            if "$" in path:
-                raise ValueError(
-                    f"Unresolved environment variable in source path "
-                    f"{src['path']!r} for {name!r}"
-                )
-            return getattr(con, f"read_{fmt}")(path)
-        raise ValueError(f"Unknown source format {fmt!r} for {name!r}")
+        if src.format == "table":  # an existing table in the backend's catalog
+            return con.table(src.name or name, database=src.database)
+
+        path = os.path.expandvars(src.path or "")
+        if "$" in path:
+            raise ValueError(
+                f"Unresolved environment variable in source path "
+                f"{src.path!r} for {name!r}"
+            )
+        return getattr(con, f"read_{src.format}")(path)

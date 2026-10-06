@@ -2,6 +2,8 @@
 backend and assert identical results: the portability contract.
 """
 
+import shutil
+
 import dagster as dg
 import ibis
 import ibis.common.exceptions
@@ -32,8 +34,8 @@ ALL_ASSETS = [
 ]
 
 CSV_SOURCES = {
-    "events_csv": {"format": "csv", "path": "data/raw_events.csv"},
-    "products_csv": {"format": "csv", "path": "data/raw_products.csv"},
+    "events": {"format": "csv", "path": "data/raw_events.csv"},
+    "products": {"format": "csv", "path": "data/raw_products.csv"},
 }
 
 
@@ -44,20 +46,20 @@ def _connect(backend: str, warehouse_dir: str | None = None):
         return ibis.polars.connect()
     if backend == "pyspark":
         pytest.importorskip("pyspark")
-        try:
-            from pyspark.sql import SparkSession
+        # skip only on the known environmental prerequisite (a JVM);
+        # any other spark startup failure is a real defect, let it fail
+        if shutil.which("java") is None:
+            pytest.skip("pyspark installed but no java on PATH")
+        from pyspark.sql import SparkSession
 
-            # A fresh warehouse dir per run: spark's local catalog is
-            # in-memory, so a fixed dir would leave orphaned table dirs
-            # that break saveAsTable on the next run.
-            session = (
-                SparkSession.builder.master("local[2]")
-                .config("spark.sql.warehouse.dir", warehouse_dir)
-                .getOrCreate()
-            )
-        except Exception as exc:
-            # spark can't start without a JDK on $JAVA_HOME
-            pytest.skip(f"pyspark session failed to start: {type(exc).__name__}: {exc}")
+        # A fresh warehouse dir per run: spark's local catalog is
+        # in-memory, so a fixed dir would leave orphaned table dirs
+        # that break saveAsTable on the next run.
+        session = (
+            SparkSession.builder.master("local[2]")
+            .config("spark.sql.warehouse.dir", warehouse_dir)
+            .getOrCreate()
+        )
         return ibis.pyspark.connect(session)
     raise ValueError(backend)
 
@@ -71,22 +73,22 @@ def con(request, tmp_path_factory):
 def cleaned(con):
     # Seed through the same CSV the pipeline reads in prod: each backend's
     # own reader decodes the empty user_id as a real NULL. The memtable
-    # path doesn't survive on pyspark — pandas 3's str dtype encodes
-    # missing strings as NaN, which Spark stores as the literal 'NaN'.
+    # path doesn't survive on pyspark (pandas 3's str dtype encodes
+    # missing strings as NaN, which Spark stores as the literal 'NaN').
     raw = con.read_csv("data/raw_events.csv")
     return con.create_table(
         "cleaned_events", transforms.clean_events(raw), overwrite=True
     )
 
 
-def test_clean_events_removes_duplicates_and_nulls(con, cleaned):
+def test_clean_events_removes_duplicates_and_nulls(cleaned):
     assert cleaned.count().execute() == 12  # 14 raw - 1 dupe - 1 null user_id
     df = cleaned.execute()
     assert df["event_type"].str.islower().all()
     assert df["amount"].isna().sum() == 0
 
 
-def test_daily_active_users(con, cleaned):
+def test_daily_active_users(cleaned):
     df = (
         transforms.daily_active_users(cleaned)
         .execute()
@@ -118,7 +120,7 @@ def test_latest_event_per_user_windowed(con, cleaned):
     assert set(df["event_id"]) == {7, 8, 10, 11, 12}
 
 
-def test_latest_event_per_user_portable(con, cleaned):
+def test_latest_event_per_user_portable(cleaned):
     """The group_by+join rewrite produces the same result on every backend."""
     df = transforms.latest_event_per_user_portable(cleaned).execute()
     assert len(df) == 5
@@ -149,6 +151,19 @@ def test_latest_event_per_user_tied_timestamps(con):
         return
     df = con.execute(windowed)
     assert dict(zip(df["user_id"], df["event_id"])) == expected
+
+
+def test_latest_event_per_user_implementations_equivalent(con, cleaned):
+    """The windowed and portable implementations agree, not just with the
+    expected IDs but with each other, on the full pipeline data."""
+    if con.name == "polars":
+        pytest.skip("windowed version unsupported on polars")
+    import pandas as pd
+
+    w = transforms.latest_event_per_user(cleaned).execute()
+    p = transforms.latest_event_per_user_portable(cleaned).execute()
+    by_id = lambda d: d.sort_values("event_id").reset_index(drop=True)
+    pd.testing.assert_frame_equal(by_id(w), by_id(p), check_dtype=False)
 
 
 def test_full_pipeline_on_duckdb(tmp_path):
@@ -228,7 +243,7 @@ def test_unresolved_env_var_in_source_path_fails_clearly():
                 "io_manager": IbisIOManager(
                     ibis=IbisResource(backend="duckdb", duckdb_path=":memory:"),
                     sources={
-                        "events_csv": {
+                        "events": {
                             "format": "csv",
                             "path": "${IBIS_DEMO_UNSET_VAR}/e.csv",
                         }
@@ -254,11 +269,11 @@ def test_pipeline_with_prod_style_parquet_sources(tmp_path):
             "io_manager": IbisIOManager(
                 ibis=IbisResource(backend="duckdb", duckdb_path=str(db)),
                 sources={
-                    "events_csv": {
+                    "events": {
                         "format": "parquet",
                         "path": str(lake / "landing/events"),
                     },
-                    "products_csv": {
+                    "products": {
                         "format": "parquet",
                         "path": str(lake / "landing/products"),
                     },
