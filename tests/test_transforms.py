@@ -37,7 +37,7 @@ CSV_SOURCES = {
 }
 
 
-def _connect(backend: str):
+def _connect(backend: str, warehouse_dir: str | None = None):
     if backend == "duckdb":
         return ibis.duckdb.connect()
     if backend == "polars":
@@ -47,9 +47,12 @@ def _connect(backend: str):
         try:
             from pyspark.sql import SparkSession
 
+            # A fresh warehouse dir per run: spark's local catalog is
+            # in-memory, so a fixed dir would leave orphaned table dirs
+            # that break saveAsTable on the next run.
             session = (
                 SparkSession.builder.master("local[2]")
-                .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse-test")
+                .config("spark.sql.warehouse.dir", warehouse_dir)
                 .getOrCreate()
             )
         except Exception as exc:
@@ -60,13 +63,17 @@ def _connect(backend: str):
 
 
 @pytest.fixture(params=["duckdb", "polars", "pyspark"])
-def con(request):
-    return _connect(request.param)
+def con(request, tmp_path_factory):
+    return _connect(request.param, str(tmp_path_factory.mktemp("spark-warehouse")))
 
 
 @pytest.fixture
 def cleaned(con):
-    raw = con.create_table("raw_events", data.raw_events, overwrite=True)
+    # Seed through the same CSV the pipeline reads in prod: each backend's
+    # own reader decodes the empty user_id as a real NULL. The memtable
+    # path doesn't survive on pyspark — pandas 3's str dtype encodes
+    # missing strings as NaN, which Spark stores as the literal 'NaN'.
+    raw = con.read_csv("data/raw_events.csv")
     return con.create_table(
         "cleaned_events", transforms.clean_events(raw), overwrite=True
     )
