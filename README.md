@@ -80,10 +80,48 @@ just materialize polars
 uses window functions, which ibis's polars backend can't translate (see
 below). The rest of the graph still materializes.)
 
+## Dagster concepts in this repo
+
+- **Asset**: a data artifact plus the code that computes it. `@dg.asset`
+  functions in `assets.py` *return* an `ir.Table`; they don't persist
+  anything themselves.
+- **Dependency**: a function parameter named after an upstream asset
+  (`cleaned_events(raw_events)`). Dagster builds the lineage graph from
+  signatures, no wiring code.
+- **Materialization**: running an asset persists its output through the
+  I/O manager (`con.create_table`), records metadata (row count, preview,
+  compiled SQL), and feeds the table to downstream assets.
+- **I/O manager + resources**: the per-deployment binding that owns
+  connections, source reads, and writes (`IbisIOManager` +
+  `IbisResource`, configured in `definitions.py`).
+- **Asset check**: `@dg.asset_check` in `checks.py` runs as a step in the
+  same run; a `blocking=True` failure stops downstream materialization.
+- **Job + schedule**: `ibis_etl_job` groups the assets;
+  `daily_schedule` targets it (`0 6 * * *`, stopped by default).
+
+### Seeing them in the UI
+
+`just dev local` serves the UI on `localhost:3000`. A five-minute tour:
+
+- **Assets → "View lineage"**: the full graph, sources through gold;
+  compute-kind tags (`ibis`, `external`) come from the specs in
+  `assets.py`.
+- **Materialize all**, then the **Runs** tab: open the run for per-step
+  logs; each produced asset carries `row_count`, a `preview`, and the
+  `compiled` SQL as metadata on its details page.
+- Open `cleaned_events` → the **Checks** tab shows the eight
+  `@asset_check` results from `checks.py`.
+- **Overview → Schedules** lists `daily_schedule`, stopped by default;
+  toggle it to enable the cron.
+- The **Launchpad** (the dropdown next to **Materialize**) exposes the
+  run config, including the io manager's `backend` and `sources`, so a
+  single run can be pointed at a different engine without editing code.
+- For the deliberate failure: `just dev polars`, materialize, and watch
+  `latest_event_per_user` go red with `OperationNotDefinedError`.
+
 ## Coming from Airflow?
 
-`dagster dev` serves the UI on `localhost:3000`. The vocabulary maps
-roughly like this:
+The vocabulary maps roughly like this:
 
 | Airflow                 | Dagster                                                  |
 | ----------------------- | -------------------------------------------------------- |
@@ -212,10 +250,13 @@ betting a codebase on a portability claim.
   run re-ingests from sources. Steps share one connection (in-process
   executor + cached connection in `IbisResource`).
 - **pyspark**: lazily imported inside `connect()`; needs a JDK and the
-  `pyspark` extra (`uv sync --extra pyspark`). `SPARK_MASTER` /
-  `SPARK_WAREHOUSE_DIR` env vars configure it; point `SPARK_MASTER` at a
-  cluster or Spark Connect URL. Sources are parquet under `DATA_LAKE`;
-  `just seed-lake` writes a local lake at `data/lake/` from the CSVs.
+  `pyspark` extra (`uv sync --extra pyspark`). Note the version coupling:
+  ibis currently resolves `pyspark<4.1`, which doesn't run on Java 25;
+  Spark 4.2 adds Java 25 support, usable once an ibis release allows that
+  version. `SPARK_MASTER` / `SPARK_WAREHOUSE_DIR` env vars configure it;
+  point `SPARK_MASTER` at a cluster or Spark Connect URL. Sources are
+  parquet under `DATA_LAKE`; `just seed-lake` writes a local lake at
+  `data/lake/` from the CSVs.
 
 ## Tests
 
